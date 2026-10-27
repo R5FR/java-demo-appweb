@@ -193,6 +193,7 @@ InetAddress.getLocalHost().getHostName(); %>
   <body>
     <header>
       <h1><%= appName %></h1>
+      <p>Cha&icirc;ne CI/CD GitOps : Jenkins &middot; Trivy &middot; Argo CD &middot; K3S</p>
     </header>
 
     <main>
