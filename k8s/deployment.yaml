@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-demo-appweb
+  labels:
+    app: java-demo-appweb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: java-demo-appweb
+  template:
+    metadata:
+      labels:
+        app: java-demo-appweb
+    spec:
+      containers:
+        - name: webapp
+          image: tomi26/java-demo-appweb:latest
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 20
