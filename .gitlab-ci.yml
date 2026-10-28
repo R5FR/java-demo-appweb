@@ -34,10 +34,11 @@ build:
 
 sonarqube:
   stage: sonar
-  image: maven:3.9-eclipse-temurin-11
+  # Le scanner SonarQube exige Java 17+
+  image: maven:3.9-eclipse-temurin-17
   tags: [classlab]
   script:
-    - mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN
+    - mvn compile sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN
   needs: [build]
 
 docker-build:
