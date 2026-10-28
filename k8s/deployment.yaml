@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: webapp
-          image: tomi26/java-demo-appweb:2
+          image: tomi26/java-demo-appweb:4
           ports:
             - containerPort: 8080
           resources:
