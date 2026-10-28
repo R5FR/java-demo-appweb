@@ -1,0 +1,76 @@
+stages:
+  - build
+  - sonar
+  - image
+  - deploy
+
+variables:
+  IMAGE: tomi26/java-demo-appweb
+  TAG: $CI_PIPELINE_IID
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+cache:
+  key: maven
+  paths:
+    - .m2/repository
+
+# Les commits "deploy:" (mise à jour des manifests) ne relancent pas de pipeline
+workflow:
+  rules:
+    - if: $CI_COMMIT_MESSAGE =~ /\[skip ci\]/
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
+
+build:
+  stage: build
+  image: maven:3.9-eclipse-temurin-11
+  tags: [classlab]
+  script:
+    - mvn clean package
+  artifacts:
+    paths:
+      - webapp/target/webapp.war
+    expire_in: 1 week
+
+sonarqube:
+  stage: sonar
+  image: maven:3.9-eclipse-temurin-11
+  tags: [classlab]
+  script:
+    - mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN
+  needs: [build]
+
+docker-build:
+  stage: image
+  image: docker:27-cli
+  tags: [classlab]
+  needs: [build]
+  script:
+    - docker build -t $IMAGE:$TAG -t $IMAGE:latest .
+    - >
+      docker run --rm
+      -v /var/run/docker.sock:/var/run/docker.sock
+      -v trivy-cache:/root/.cache/
+      aquasec/trivy:latest image
+      --severity HIGH,CRITICAL --exit-code 0 --no-progress
+      $IMAGE:$TAG
+    - echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
+    - docker push $IMAGE:$TAG
+    - docker push $IMAGE:latest
+  after_script:
+    - docker logout || true
+
+deploy-manifests:
+  stage: deploy
+  image: alpine:3
+  tags: [classlab]
+  needs: [docker-build]
+  script:
+    - apk add --no-cache git
+    - git clone https://$GL_USER:$GL_TOKEN@gitlab.com/tomleptl/java-demo-appweb.git gitops
+    - cd gitops
+    - sed -i "s|image: .*java-demo-appweb:.*|image: $IMAGE:$TAG|" k8s/deployment.yaml
+    - git config user.email "gitlab-ci@classlab.local"
+    - git config user.name "GitLab CI"
+    - git commit -am "deploy: $IMAGE:$TAG [skip ci]"
+    - git push origin main
