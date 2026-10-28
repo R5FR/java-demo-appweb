@@ -24,6 +24,9 @@ jobs:
         with:
           name: webapp-war
           path: webapp/target/webapp.war
+      # Le conteneur tourne en root : on rend l'espace de travail à l'utilisateur du runner (vagrant)
+      - if: always()
+        run: chown -R 1000:1000 "$GITHUB_WORKSPACE"
 
   sonarqube:
     needs: build
@@ -33,6 +36,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: mvn compile sonar:sonar -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+      - if: always()
+        run: chown -R 1000:1000 "$GITHUB_WORKSPACE"
 
   docker-build:
     needs: build
