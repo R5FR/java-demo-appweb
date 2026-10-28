@@ -1,0 +1,79 @@
+name: CI/CD
+
+# Le code vit sur GitLab et est mirroré ici. Les commits "deploy: ... [skip ci]"
+# (mise à jour des manifests) ne relancent pas de workflow.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'k8s/**'
+
+env:
+  REGISTRY: 192.168.56.11:8082
+  IMAGE: 192.168.56.11:8082/java-demo-appweb
+  TAG: ${{ github.run_number }}
+
+jobs:
+  build:
+    runs-on: [self-hosted, classlab]
+    container: maven:3.9-eclipse-temurin-11
+    steps:
+      - uses: actions/checkout@v4
+      - run: mvn clean package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webapp-war
+          path: webapp/target/webapp.war
+
+  sonarqube:
+    needs: build
+    runs-on: [self-hosted, classlab]
+    # Le scanner SonarQube 13.x exige Java 21+
+    container: maven:3.9-eclipse-temurin-21
+    steps:
+      - uses: actions/checkout@v4
+      - run: mvn compile sonar:sonar -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+
+  docker-build:
+    needs: build
+    runs-on: [self-hosted, classlab]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: webapp-war
+          path: webapp/target
+      - run: docker build -t $IMAGE:$TAG -t $IMAGE:latest .
+      - name: Scan Trivy
+        run: >
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          -v trivy-cache:/root/.cache/
+          aquasec/trivy:latest image
+          --severity HIGH,CRITICAL --exit-code 0 --no-progress
+          $IMAGE:$TAG
+      - name: Push Nexus
+        run: |
+          echo "${{ secrets.NEXUS_PASSWORD }}" | docker login $REGISTRY -u "${{ secrets.NEXUS_USER }}" --password-stdin
+          docker push $IMAGE:$TAG
+          docker push $IMAGE:latest
+      - if: always()
+        run: docker logout $REGISTRY || true
+
+  deploy-manifests:
+    needs: [docker-build, sonarqube]
+    runs-on: [self-hosted, classlab]
+    steps:
+      - name: Mise à jour des manifests sur GitLab
+        env:
+          GL_USER: ${{ secrets.GL_USER }}
+          GL_TOKEN: ${{ secrets.GL_TOKEN }}
+        run: |
+          rm -rf gitops
+          git clone https://$GL_USER:$GL_TOKEN@gitlab.com/tomleptl/java-demo-appweb.git gitops
+          cd gitops
+          sed -i "s|image: .*java-demo-appweb:.*|image: $IMAGE:$TAG|" k8s/deployment.yaml
+          git config user.email "github-actions@classlab.local"
+          git config user.name "GitHub Actions"
+          git commit -am "deploy: $IMAGE:$TAG [skip ci]"
+          git push origin main
