@@ -69,8 +69,8 @@ deploy-manifests:
     - apk add --no-cache git
     - git clone https://$GL_USER:$GL_TOKEN@gitlab.com/tomleptl/java-demo-appweb.git gitops
     - cd gitops
-    - sed -i "s|image: .*java-demo-appweb:.*|image: $IMAGE:$TAG|" k8s/deployment.yaml
+    - 'sed -i "s|image: .*java-demo-appweb:.*|image: $IMAGE:$TAG|" k8s/deployment.yaml'
     - git config user.email "gitlab-ci@classlab.local"
     - git config user.name "GitLab CI"
-    - git commit -am "deploy: $IMAGE:$TAG [skip ci]"
+    - 'git commit -am "deploy: $IMAGE:$TAG [skip ci]"'
     - git push origin main
